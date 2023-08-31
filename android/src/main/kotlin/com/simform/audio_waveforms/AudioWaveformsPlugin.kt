@@ -2,6 +2,7 @@ package com.simform.audio_waveforms
 
 import android.app.Activity
 import android.content.Context
+import android.media.AudioManager
 import android.media.MediaRecorder
 import android.os.Build
 import android.util.Log
@@ -35,6 +36,8 @@ class AudioWaveformsPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
     private lateinit var applicationContext: Context
     private var audioPlayers = mutableMapOf<String, AudioPlayer?>()
     private var extractors = mutableMapOf<String, WaveformExtractor?>()
+    private lateinit var audioManager: AudioManager
+
 
     override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
         channel = MethodChannel(flutterPluginBinding.binaryMessenger, Constants.methodChannelName)
@@ -57,9 +60,19 @@ class AudioWaveformsPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
             Constants.startRecording -> {
                 val useLegacyNormalization =
                     (call.argument(Constants.useLegacyNormalization) as Boolean?) ?: false
+                audioManager = applicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager;
+                if(!audioManager.isBluetoothScoOn){
+                    audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+                    audioManager.startBluetoothSco()
+                    audioManager.isBluetoothScoOn = true
+                }
                 audioRecorder.startRecorder(result, recorder, useLegacyNormalization)
             }
             Constants.stopRecording -> {
+                if(audioManager.isBluetoothScoOn){
+                    audioManager.stopBluetoothSco()
+                    audioManager.isBluetoothScoOn = false
+                }
                 audioRecorder.stopRecording(result, recorder, path!!)
                 recorder = null
             }
