@@ -212,7 +212,7 @@ class _HomeState extends State<Home> {
       if (isRecording) {
         recorderController.reset();
 
-        final path = await recorderController.stop(false);
+        final path = await recorderController.stop(callReset: false);
 
         if (path != null) {
           isRecordingCompleted = true;

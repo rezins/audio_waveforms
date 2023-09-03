@@ -24,6 +24,8 @@ class RecorderController extends ChangeNotifier {
 
   int? bitRate;
 
+  double _currentDecible = 0;
+
   /// Db we get from native is too high so in Android it the value is
   /// subtracted and in IOS value added.
   @Deprecated(
@@ -170,22 +172,12 @@ class RecorderController extends ChangeNotifier {
       await checkPermission();
       if (_hasPermission) {
         if (Platform.isAndroid && _recorderState.isStopped) {
-          await _initRecorder(
-            path: path,
-            androidEncoder: androidEncoder,
-            androidOutputFormat: androidOutputFormat,
-            sampleRate: sampleRate,
-            bitRate: bitRate,
-          );
+          _setRecorderState(RecorderState.initialized);
+          notifyListeners();
         }
         if (_recorderState.isPaused) {
-          _isRecording = await AudioWaveformsInterface.instance.resume();
-          if (_isRecording) {
-            _startTimer();
-            _setRecorderState(RecorderState.recording);
-          } else {
-            throw "Failed to resume recording";
-          }
+          startTimer();
+          _setRecorderState(RecorderState.recording);
           notifyListeners();
           return;
         }
@@ -193,21 +185,8 @@ class RecorderController extends ChangeNotifier {
           _setRecorderState(RecorderState.initialized);
         }
         if (_recorderState.isInitialized) {
-          _isRecording = await AudioWaveformsInterface.instance.record(
-            audioFormat: Platform.isIOS
-                ? iosEncoder?.index ?? this.iosEncoder.index
-                : androidEncoder?.index ?? this.androidEncoder.index,
-            sampleRate: sampleRate ?? this.sampleRate,
-            bitRate: bitRate ?? this.bitRate,
-            path: path,
-            useLegacyNormalization: _useLegacyNormalization,
-          );
-          if (_isRecording) {
-            _setRecorderState(RecorderState.recording);
-            _startTimer();
-          } else {
-            throw "Failed to start recording";
-          }
+          _setRecorderState(RecorderState.recording);
+          startTimer();
           notifyListeners();
         }
       } else {
@@ -215,30 +194,6 @@ class RecorderController extends ChangeNotifier {
         notifyListeners();
       }
     }
-  }
-
-  /// Initialises recorder for android platform.
-  Future<void> _initRecorder({
-    String? path,
-    AndroidEncoder? androidEncoder,
-    AndroidOutputFormat? androidOutputFormat,
-    int? sampleRate,
-    int? bitRate,
-  }) async {
-    final initialized = await AudioWaveformsInterface.instance.initRecorder(
-      path: path,
-      encoder: androidEncoder?.index ?? this.androidEncoder.index,
-      outputFormat:
-          androidOutputFormat?.index ?? this.androidOutputFormat.index,
-      sampleRate: sampleRate ?? this.sampleRate,
-      bitRate: bitRate ?? this.bitRate,
-    );
-    if (initialized) {
-      _setRecorderState(RecorderState.initialized);
-    } else {
-      throw "Failed to initialize recorder";
-    }
-    notifyListeners();
   }
 
   /// Checks for microphone permission and return true if permission was
@@ -261,10 +216,6 @@ class RecorderController extends ChangeNotifier {
   /// Pauses the current recording. Call [record] to resume recording.
   Future<void> pause() async {
     if (_recorderState.isRecording) {
-      _isRecording = (await AudioWaveformsInterface.instance.pause()) ?? true;
-      if (_isRecording) {
-        throw "Failed to pause recording";
-      }
       _recorderTimer?.cancel();
       _timer?.cancel();
       _setRecorderState(RecorderState.paused);
@@ -283,27 +234,15 @@ class RecorderController extends ChangeNotifier {
   /// When [callReset] is set to false it will require calling [reset] function
   /// manually else it will start showing waveforms from same place where it
   /// left of for previous recording.
-  Future<String?> stop([bool callReset = true]) async {
+  Future<String?> stop({bool callReset = true, Duration? duration}) async {
     if (_recorderState.isRecording || _recorderState.isPaused) {
-      final audioInfo = await AudioWaveformsInterface.instance.stop();
-      if (audioInfo != null) {
-        _isRecording = false;
-        _timer?.cancel();
-        _recorderTimer?.cancel();
-        if (audioInfo[1] != null) {
-          var duration = int.tryParse(audioInfo[1]!);
-          if (duration != null) {
-            recordedDuration = Duration(milliseconds: duration);
-            _recordedFileDurationController.add(recordedDuration);
-          }
-        }
-        elapsedDuration = Duration.zero;
-        _setRecorderState(RecorderState.stopped);
-        if (callReset) reset();
-        return audioInfo[0];
-      } else {
-        throw "Failed stop recording";
-      }
+      _isRecording = false;
+      _timer?.cancel();
+      _recorderTimer?.cancel();
+      recordedDuration = duration ?? const Duration();
+      _recordedFileDurationController.add(recordedDuration);
+      elapsedDuration = Duration.zero;
+      _setRecorderState(RecorderState.stopped);
     }
 
     notifyListeners();
@@ -328,11 +267,14 @@ class RecorderController extends ChangeNotifier {
   }
 
   /// Gets decibels from native
-  Future<double?> _getDecibel() async =>
-      await AudioWaveformsInterface.instance.getDecibel();
+  Future<double?> _getDecibel() async => Future.value(_currentDecible);
+
+  setDecible(double val){
+    _currentDecible = val;
+  }
 
   /// Gets decibel by every defined frequency
-  void _startTimer() {
+  void startTimer() {
     recordedDuration = Duration.zero;
     const duration = Duration(milliseconds: 50);
     _recorderTimer = Timer.periodic(duration, (_) {
