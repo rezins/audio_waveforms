@@ -24,6 +24,8 @@ class RecorderController extends ChangeNotifier {
 
   int? bitRate;
 
+  bool _showWaveData = false;
+
   double _currentDecible = 0;
 
   /// Db we get from native is too high so in Android it the value is
@@ -35,7 +37,7 @@ class RecorderController extends ChangeNotifier {
   double normalizationFactor = Platform.isAndroid ? 60 : 40;
 
   /// Current maximum peak power for ios and peak amplitude android.
-  double _maxPeak = Platform.isIOS ? 1 : 32786.0;
+  double _maxPeak = 32786.0;
 
   /// Current min value.
   double _currentMin = 0;
@@ -167,7 +169,9 @@ class RecorderController extends ChangeNotifier {
     IosEncoder? iosEncoder,
     int? sampleRate,
     int? bitRate,
+    bool showWaveData = false
   }) async {
+    _showWaveData = showWaveData;
     if (!_recorderState.isRecording) {
       await checkPermission();
       if (_hasPermission) {
@@ -330,6 +334,9 @@ class RecorderController extends ChangeNotifier {
     );
 
     final scaledWave = (absDb - _currentMin) / (_maxPeak - _currentMin);
+    if(_showWaveData){
+      debugPrint("$scaledWave");
+    }
     _waveData.add(scaledWave);
     notifyListeners();
   }
